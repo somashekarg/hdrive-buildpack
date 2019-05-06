@@ -54,7 +54,6 @@ touch ~/.aws/credentials
 touch ~/.aws/config
 chmod +w ~/.aws/credentials
 chmod +w ~/.aws/config
-export PATH="$HOME/vendor/awscli/bin:$PATH"
 EOF
 chmod +x $BUILD_DIR/.profile.d/install_awscli.sh
 
