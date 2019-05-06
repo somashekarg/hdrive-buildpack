@@ -7,30 +7,42 @@ set -o pipefail   # don't ignore exit codes when piping output
 set -o nounset    # fail on unset variables
 unset GIT_DIR     # Avoid GIT_DIR leak from previous build steps
 		
-
 ### Configure directories
 BUILD_DIR=${1:-}
 CACHE_DIR=${2:-}
 ENV_DIR=${3:-}
 BP_DIR=$(cd $(dirname ${0:-}); cd ..; pwd)
-echo "The current stack version: ${STACK}"
+
+function print() {
+  echo "-----> $*"
+}
+
+function indent() {
+  c='s/^/       /'
+  case $(uname) in
+    Darwin) sed -l "$c";;
+    *)      sed -u "$c";;
+  esac
+}
+
+print "The current stack version: ${STACK}"
 PROJECT_VERSION=$(grep -oPm1 "(?<=<TargetFramework>)[^<]+" ${BUILD_DIR}/*.csproj)
-echo "The current project version: ${PROJECT_VERSION}"
+print "The current project version: ${PROJECT_VERSION}"
 
 APT_CACHE_DIR="$CACHE_DIR/apt/cache"
 APT_STATE_DIR="$CACHE_DIR/apt/state"
 mkdir -p "$APT_CACHE_DIR/archives/partial"
 mkdir -p "$APT_STATE_DIR/lists/partial"
 APT_OPTIONS="-o debug::nolocking=true -o dir::cache=$APT_CACHE_DIR -o dir::state=$APT_STATE_DIR"
-echo "Updating apt caches"
+print "Updating apt caches"
 apt-get $APT_OPTIONS update | indent
 
-echo "AWS cli install"
-echo "Fetching AWS CLI into slug"
+print "AWS cli install"
+print "Fetching AWS CLI into slug"
 curl --progress-bar -o /tmp/awscli-bundle.zip "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip"
 unzip -qq -d "$BUILD_DIR/vendor" /tmp/awscli-bundle.zip
 
-echo "adding installer script into app/.profile.d"
+print "adding installer script into app/.profile.d"
 mkdir -p ${BUILD_DIR}/.profile.d
 cp $BP_DIR/profile/* $BUILD_DIR/.profile.d/
 cat <<EOF >${BUILD_DIR}/.profile.d/install_awscli.sh
@@ -47,7 +59,7 @@ chmod +x $BUILD_DIR/.profile.d/install_awscli.sh
 
 #cleaning up
 rm -rf /tmp/awscli*
-echo "aws cli installation done"
+print "aws cli installation done"
 
 NETCORE_VERSION="2.2.104"
 if [ $PROJECT_VERSION == "netcoreapp2.0" ]; then
@@ -55,7 +67,7 @@ if [ $PROJECT_VERSION == "netcoreapp2.0" ]; then
 elif [ $PROJECT_VERSION == "netcoreapp2.1" ]; then
 	NETCORE_VERSION="2.1.403"
 fi
-echo "The install dotnet sdk version: ${NETCORE_VERSION}"
+print "The install dotnet sdk version: ${NETCORE_VERSION}"
 
 ### Load dependencies
 source $BP_DIR/lib/helpers
@@ -64,7 +76,7 @@ export_env_dir $ENV_DIR
 export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=${DOTNET_SKIP_FIRST_TIME_EXPERIENCE:-1}
 export DOTNET_CLI_TELEMETRY_OPTOUT=${DOTNET_CLI_TELEMETRY_OPTOUT:-1}
 
-echo "Installing the dependencies"
+print "Installing the dependencies"
 if [ $STACK == "cedar-14" ] || [ $STACK == "heroku-14" ]; then
    	if [ $PROJECT_VERSION == "netcoreapp2.1" ]; then
 		apt_install libicu52
@@ -85,7 +97,7 @@ else
    	fi
 fi
 
-echo "Installing dotnet"
+print "Installing dotnet"
 install_dotnet $BUILD_DIR $CACHE_DIR $NETCORE_VERSION
 
 export PATH="/app/dotnet:${PATH}"
@@ -100,7 +112,7 @@ fi
 if [ -z ${PROJECT_NAME:-} ]; then
 	PROJECT_NAME=$(basename ${PROJECT_FILE%.*})
 fi
-echo "publish ${PROJECT_FILE}"
+print "publish ${PROJECT_FILE}"
 dotnet publish $PROJECT_FILE --output ${BUILD_DIR}/heroku_output --configuration Release --runtime linux-x64
 
 #echo "Remove project files in production machine"
